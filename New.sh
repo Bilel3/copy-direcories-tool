@@ -20,11 +20,8 @@ if ! ssh -o "BatchMode=yes" "$remote_host" true; then
     sshpass -p "$ssh_password" ssh-copy-id -i ~/.ssh/id_rsa.pub "$remote_host"
 fi
 
-# Copy folders listed in directories.txt to remote host
-while IFS= read -r folder; do
-    scp -r "$local_folder/$folder" "$remote_host":"$remote_path"
-done < directories.txt
-
-# Exclude files matching regex pattern in .exclude file
+# Copy folders listed in directories.txt to remote host, excluding files matching regex pattern in .exclude
 exclude_pattern=$(<.exclude)
-rsync -av --exclude="$exclude_pattern" "$local_folder/" "$remote_host":"$remote_path"
+while IFS= read -r folder; do
+    rsync -av --exclude="$exclude_pattern" "$local_folder/$folder" "$remote_host":"$remote_path"
+done < directories.txt
