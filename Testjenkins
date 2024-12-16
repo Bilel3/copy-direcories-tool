@@ -1,0 +1,58 @@
+pipeline {
+    agent any
+    environment {
+        // Replace these with your actual values
+        AUTH_URL = 'https://your-api-endpoint.com/authenticate' // Authentication API URL
+        API_USERNAME = 'your_username'                         // API username
+        API_PASSWORD = 'your_password'                         // API password
+        API_ENDPOINT = 'https://your-api-endpoint.com/resource' // API endpoint to use token
+    }
+    stages {
+        stage('Authenticate and Get Token') {
+            steps {
+                script {
+                    echo "Authenticating and retrieving bearer token..."
+
+                    // Send POST request to get token
+                    def response = httpRequest(
+                        httpMode: 'POST',
+                        url: "${AUTH_URL}",
+                        contentType: 'APPLICATION_JSON',
+                        requestBody: """
+                        {
+                            "username": "${API_USERNAME}",
+                            "password": "${API_PASSWORD}"
+                        }
+                        """,
+                        validResponseCodes: '200'
+                    )
+
+                    // Parse the response to extract the bearer token
+                    def jsonResponse = readJSON text: response.content
+                    env.BEARER_TOKEN = jsonResponse.token // Adjust the key as per your API response
+
+                    echo "Bearer token retrieved successfully!"
+                }
+            }
+        }
+        stage('Use Bearer Token') {
+            steps {
+                script {
+                    echo "Using the bearer token to access API..."
+
+                    // Use the token to make another API request
+                    def apiResponse = httpRequest(
+                        httpMode: 'GET',
+                        url: "${API_ENDPOINT}",
+                        customHeaders: [
+                            [name: 'Authorization', value: "Bearer ${env.BEARER_TOKEN}"]
+                        ],
+                        validResponseCodes: '200'
+                    )
+
+                    echo "API response: ${apiResponse.content}"
+                }
+            }
+        }
+    }
+}
