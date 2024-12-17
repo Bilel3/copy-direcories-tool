@@ -12,9 +12,14 @@ pipeline {
         stage('Authenticate with API') {
             steps {
                 script {
-                    // Prepare the request with `--data-urlencode` and `--data`
-                    def requestBody = """client id=${CLIENT_ID}&client secret=${CLIENT_SECRET}&${GRANT_TYPE}"""
-                    
+                    // URL-encode the data to ensure it's properly formatted
+                    def encodedClientId = URLEncoder.encode(CLIENT_ID, 'UTF-8')
+                    def encodedClientSecret = URLEncoder.encode(CLIENT_SECRET, 'UTF-8')
+                    def encodedGrantType = URLEncoder.encode(GRANT_TYPE, 'UTF-8')
+
+                    // Prepare the request body
+                    def requestBody = """client_id=${encodedClientId}&client_secret=${encodedClientSecret}&${encodedGrantType}"""
+
                     // Send the HTTP POST request
                     def response = httpRequest(
                         acceptType: 'APPLICATION_JSON',
@@ -25,12 +30,17 @@ pipeline {
                         customHeaders: [[name: 'Content-Type', value: 'application/x-www-form-urlencoded']]
                     )
 
-                    // Log the response
+                    // Log the response for debugging
                     echo "Response: ${response.content}"
+
+                    // Check the response status
+                    if (response.status != 200) {
+                        error "Authentication failed with status ${response.status}"
+                    }
 
                     // Parse the response if it's JSON
                     def jsonResponse = readJSON text: response.content
-                    echo "Access Token: ${jsonResponse.access_token}" // Replace with the actual key for the token
+                    echo "Access Token: ${jsonResponse.access_token}" // Adjust based on actual token key
                 }
             }
         }
