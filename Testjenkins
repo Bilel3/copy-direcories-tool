@@ -2,45 +2,60 @@ pipeline {
     agent any
 
     environment {
-        API_URL = 'https://oauth2.accesscontrol.cloud.socgen/v3/oauth2/access token' // Replace with your API URL
-        CLIENT_ID = 'ant prd snapshot'  // Replace with your client ID
-        CLIENT_SECRET = 'xxxxx'         // Replace with your client secret
-        GRANT_TYPE = 'grant_type=client_credentials&2'
+        AUTH_API_URL = 'https://oauth2.accesscontrol.cloud.socgen/v3/oauth2/access_token'
+        CLIENT_ID = 'ant prd snapshot'
+        CLIENT_SECRET = 'xxxxx'
+        GRANT_TYPE = 'client_credentials'
+        SECOND_API_URL = 'https://example.com/api/endpoint' // Replace with your second API URL
     }
 
     stages {
-        stage('Authenticate with API') {
+        stage('Authenticate and Get Token') {
             steps {
                 script {
-                    // URL-encode the data to ensure it's properly formatted
-                    def encodedClientId = URLEncoder.encode(CLIENT_ID, 'UTF-8')
-                    def encodedClientSecret = URLEncoder.encode(CLIENT_SECRET, 'UTF-8')
-                    def encodedGrantType = URLEncoder.encode(GRANT_TYPE, 'UTF-8')
+                    // Run the curl command to authenticate and capture the response
+                    def response = sh(
+                        script: """
+                        curl -s -X POST "${AUTH_API_URL}" \
+                        -H "Content-Type: application/x-www-form-urlencoded" \
+                        --data-urlencode "client_id=${CLIENT_ID}" \
+                        --data-urlencode "client_secret=${CLIENT_SECRET}" \
+                        --data "grant_type=${GRANT_TYPE}"
+                        """,
+                        returnStdout: true
+                    ).trim()
 
-                    // Prepare the request body
-                    def requestBody = """client_id=${encodedClientId}&client_secret=${encodedClientSecret}&${encodedGrantType}"""
+                    echo "Response: ${response}" // Log the full response for debugging
 
-                    // Send the HTTP POST request
-                    def response = httpRequest(
-                        acceptType: 'APPLICATION_JSON',
-                        contentType: 'APPLICATION_FORM',
-                        httpMode: 'POST',
-                        url: API_URL,
-                        requestBody: requestBody,
-                        customHeaders: [[name: 'Content-Type', value: 'application/x-www-form-urlencoded']]
-                    )
+                    // Parse the access token from the JSON response
+                    def jsonResponse = readJSON text: response
+                    def accessToken = jsonResponse.access_token
 
-                    // Log the response for debugging
-                    echo "Response: ${response.content}"
-
-                    // Check the response status
-                    if (response.status != 200) {
-                        error "Authentication failed with status ${response.status}"
+                    if (!accessToken) {
+                        error "Failed to obtain access token!"
                     }
 
-                    // Parse the response if it's JSON
-                    def jsonResponse = readJSON text: response.content
-                    echo "Access Token: ${jsonResponse.access_token}" // Adjust based on actual token key
+                    // Store the access token in an environment variable for the next stage
+                    env.ACCESS_TOKEN = accessToken
+                    echo "Access Token: ${env.ACCESS_TOKEN}" // Optional: Print the token (for debugging only)
+                }
+            }
+        }
+
+        stage('Use Token in Second API') {
+            steps {
+                script {
+                    // Use the captured token in another API call
+                    def secondApiResponse = sh(
+                        script: """
+                        curl -s -X GET "${SECOND_API_URL}" \
+                        -H "Authorization: Bearer ${env.ACCESS_TOKEN}" \
+                        -H "Content-Type: application/json"
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Second API Response: ${secondApiResponse}"
                 }
             }
         }
@@ -48,7 +63,7 @@ pipeline {
 
     post {
         always {
-            echo "Authentication stage completed."
+            echo "Pipeline execution completed."
         }
     }
 }
